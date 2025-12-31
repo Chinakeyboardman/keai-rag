@@ -188,14 +188,14 @@ china-pdf-rag/
 - [x] 创建初始化脚本 `scripts/init_db.py`
 - [x] 创建安装脚本 `scripts/setup.sh`
 
-### 阶段二：核心模块开发
-- [ ] 实现配置管理模块（`config/settings.py`）
-- [ ] 实现文档处理器基类（策略模式）
-- [ ] 实现PDF处理器（`processors/pdf_processor.py`）
-- [ ] 实现向量存储抽象层（`core/vector_store.py`）
-- [ ] 实现Qdrant存储（`core/qdrant_store.py`）
-- [ ] 实现FAISS降级存储（`core/faiss_store.py`）
-- [ ] 实现连接检测和自动降级逻辑
+### 阶段二：核心模块开发 ✅
+- [x] 实现配置管理模块（`config/settings.py`）
+- [x] 实现文档处理器基类（策略模式）
+- [x] 实现PDF处理器（`processors/pdf_processor.py`）
+- [x] 实现向量存储抽象层（`core/vector_store.py`）
+- [x] 实现Qdrant存储（`core/qdrant_store.py`）
+- [x] 实现FAISS降级存储（`core/faiss_store.py`）
+- [x] 实现连接检测和自动降级逻辑（`core/vector_store_manager.py`）
 
 ### 阶段三：服务层开发
 - [ ] 实现Embedding服务（支持API和本地模型）
