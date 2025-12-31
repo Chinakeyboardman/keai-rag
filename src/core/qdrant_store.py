@@ -126,24 +126,43 @@ class QdrantStore(BaseVectorStore):
             是否插入成功
         """
         try:
+            import uuid
+            from src.utils.logger import logger
+            
             # 验证输入
             if not (len(vectors) == len(texts) == len(metadatas)):
                 raise ValueError("向量、文本和元数据数量必须一致")
             
             # 生成 ID（如果未提供）
             if ids is None:
-                import uuid
                 ids = [str(uuid.uuid4()) for _ in range(len(vectors))]
+            
+            # Qdrant 的点 ID 必须是纯 UUID 或整数
+            # 如果传入的 ID 包含下划线（如 document_id_chunk_N），需要转换为纯 UUID
+            qdrant_ids = []
+            for original_id in ids:
+                # 检查是否是有效的 UUID 格式
+                try:
+                    # 尝试解析为 UUID
+                    uuid.UUID(original_id)
+                    qdrant_ids.append(original_id)
+                except ValueError:
+                    # 如果不是有效的 UUID，生成新的 UUID
+                    # 将原始 ID 存储在 payload 中
+                    new_id = str(uuid.uuid4())
+                    qdrant_ids.append(new_id)
+                    logger.debug(f"将点 ID 从 '{original_id}' 转换为 UUID '{new_id}'")
             
             # 构建点数据
             points = []
-            for vec_id, vector, text, metadata in zip(ids, vectors, texts, metadatas):
+            for qdrant_id, original_id, vector, text, metadata in zip(qdrant_ids, ids, vectors, texts, metadatas):
                 payload = {
                     "text": text,
+                    "original_id": original_id,  # 保存原始 ID
                     **metadata
                 }
                 point = PointStruct(
-                    id=vec_id,
+                    id=qdrant_id,  # 使用纯 UUID
                     vector=vector.tolist(),
                     payload=payload
                 )
@@ -244,7 +263,7 @@ class QdrantStore(BaseVectorStore):
             document_id: 文档 ID
             
         Returns:
-            块 ID 列表
+            块 ID 列表（原始 ID）
         """
         try:
             from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -263,10 +282,17 @@ class QdrantStore(BaseVectorStore):
                 limit=10000  # 假设一个文档最多有 10000 个块
             )
             
-            chunk_ids = [point.id for point in results[0]]
+            # 从 payload 中获取原始 ID
+            chunk_ids = []
+            for point in results[0]:
+                # 优先使用 original_id，否则使用 Qdrant ID
+                original_id = point.payload.get("original_id", str(point.id))
+                chunk_ids.append(original_id)
+            
             return chunk_ids
         except Exception as e:
-            print(f"查找块 ID 失败: {e}")
+            from src.utils.logger import logger
+            logger.error(f"查找块 ID 失败: {e}")
             return []
     
     def get_vector_count(self) -> int:

@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>企业级 RAG 系统</title>
+    <!-- Markdown 渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -134,6 +136,151 @@
             max-height: 400px;
             overflow-y: auto;
             margin-top: 20px;
+            position: relative;
+        }
+
+        .btn-expand {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s;
+            z-index: 10;
+        }
+
+        .btn-expand:hover {
+            background: #764ba2;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Markdown 样式 */
+        .markdown-content {
+            line-height: 1.8;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3 {
+            color: #667eea;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .markdown-content p {
+            margin-bottom: 12px;
+        }
+
+        .markdown-content ul,
+        .markdown-content ol {
+            margin-left: 20px;
+            margin-bottom: 12px;
+        }
+
+        .markdown-content code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .markdown-content pre {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-bottom: 12px;
+        }
+
+        .markdown-content pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 15px;
+            margin-left: 0;
+            color: #666;
+            font-style: italic;
+        }
+
+        /* 全屏 Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            animation: fadeIn 0.3s;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            animation: slideDown 0.3s;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .modal-header h2 {
+            color: #667eea;
+            margin: 0;
+        }
+
+        .btn-close {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-close:hover {
+            background: #c82333;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
 
         .result-item {
@@ -328,6 +475,17 @@
             </div>
         </div>
 
+        <!-- 全屏 Modal -->
+        <div id="answerModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>💡 回答详情</h2>
+                    <button class="btn-close" onclick="closeModal()">✕ 关闭</button>
+                </div>
+                <div id="modalAnswer" class="markdown-content"></div>
+            </div>
+        </div>
+
         <div class="footer">
             <p>企业级 RAG 系统 v1.0.0 | API 文档: <a href="/docs" style="color: white;">点击查看</a></p>
         </div>
@@ -484,10 +642,18 @@
                 const result = await response.json();
 
                 if (response.ok) {
+                    const answer = result.answer || '暂无答案';
+                    // 使用 marked 渲染 markdown
+                    const markdownHtml = marked.parse(answer);
+                    
+                    // 存储答案到全局变量，用于全屏显示
+                    window.currentAnswer = answer;
+                    
                     let html = `
+                        <button class="btn-expand" onclick="showFullAnswer()">🔍 全屏查看</button>
                         <div class="result-item">
                             <h3>💡 回答</h3>
-                            <p>${result.answer || '暂无答案'}</p>
+                            <div class="markdown-content">${markdownHtml}</div>
                         </div>
                     `;
 
@@ -582,6 +748,37 @@
 
         // 页面加载时获取文档列表
         loadDocuments();
+
+        // 全屏显示回答
+        function showFullAnswer() {
+            const modal = document.getElementById('answerModal');
+            const modalAnswer = document.getElementById('modalAnswer');
+            // 使用 marked 渲染 markdown
+            if (window.currentAnswer) {
+                modalAnswer.innerHTML = marked.parse(window.currentAnswer);
+                modal.style.display = 'block';
+            }
+        }
+
+        // 关闭 Modal
+        function closeModal() {
+            document.getElementById('answerModal').style.display = 'none';
+        }
+
+        // 点击 Modal 外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('answerModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        // ESC 键关闭 Modal
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
     </script>
 </body>
 </html>
