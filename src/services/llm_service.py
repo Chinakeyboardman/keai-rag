@@ -170,23 +170,76 @@ class LLMService:
         max_tokens: int
     ) -> str:
         """使用 API 生成"""
+        from src.utils.logger import logger
+        import time
+        import requests
+        
         try:
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            response = self.model.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_p=self.top_p
-            )
+            logger.info(f"📞 调用 LLM API: {self.model_name}")
+            logger.info(f"📝 提示词长度: {len(prompt)} 字符")
+            logger.info(f"⚙️  参数: temperature={temperature}, max_tokens={max_tokens}")
+            logger.info(f"🌐 API Base URL: {settings.LLM_API_BASE}")
             
-            return response.choices[0].message.content.strip()
+            # 检查 API 连接（仅对本地 Ollama 进行严格检查）
+            base_url = settings.LLM_API_BASE.rstrip('/v1').rstrip('/')
+            if 'localhost' in base_url or '127.0.0.1' in base_url:
+                # 检查 Ollama 连接
+                health_url = base_url.replace('/v1', '') + '/api/tags'
+                logger.info(f"🔍 检查 Ollama 连接: {health_url}")
+                try:
+                    resp = requests.get(health_url, timeout=10)
+                    if resp.status_code == 200:
+                        logger.info(f"✅ Ollama 服务连接正常")
+                    else:
+                        logger.error(f"❌ Ollama 服务响应异常: {resp.status_code}")
+                        raise RuntimeError(f"Ollama 服务不可用，HTTP 状态码: {resp.status_code}。请确保 Ollama 服务正在运行：ollama serve")
+                except requests.exceptions.Timeout:
+                    logger.error(f"❌ Ollama 服务连接超时（10秒）")
+                    raise RuntimeError("Ollama 服务连接超时。请确保 Ollama 服务正在运行：ollama serve")
+                except requests.exceptions.ConnectionError as e:
+                    logger.error(f"❌ 无法连接到 Ollama 服务: {e}")
+                    raise RuntimeError(f"无法连接到 Ollama 服务。请确保 Ollama 服务正在运行：ollama serve")
+                except Exception as e:
+                    logger.error(f"❌ Ollama 连接检查失败: {e}")
+                    raise RuntimeError(f"Ollama 连接检查失败: {e}。请确保 Ollama 服务正在运行：ollama serve")
             
+            start_time = time.time()
+            logger.info(f"⏳ 开始发送请求到 LLM API...")
+            
+            try:
+                response = self.model.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    top_p=self.top_p,
+                    timeout=120.0  # 120秒超时
+                )
+            except Exception as api_error:
+                elapsed_time = time.time() - start_time
+                logger.error(f"❌ LLM API 调用异常（耗时 {elapsed_time:.2f} 秒）: {type(api_error).__name__}: {api_error}")
+                raise
+            
+            elapsed_time = time.time() - start_time
+            
+            if not response.choices or not response.choices[0].message.content:
+                logger.error(f"❌ LLM API 返回空响应")
+                raise RuntimeError("LLM API 返回空响应")
+            
+            answer = response.choices[0].message.content.strip()
+            logger.info(f"✅ LLM API 调用成功，耗时 {elapsed_time:.2f} 秒，响应长度: {len(answer)} 字符")
+            
+            return answer
+            
+        except RuntimeError:
+            raise
         except Exception as e:
+            logger.error(f"❌ LLM API 调用失败: {type(e).__name__}: {e}", exc_info=True)
             raise RuntimeError(f"API 生成失败: {e}")
     
     def get_model_info(self) -> dict:

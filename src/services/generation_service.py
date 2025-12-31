@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 
 from src.services.llm_service import get_llm_service
 from src.services.retrieval_service import RetrievalService
+from src.utils.logger import logger
 
 
 class GenerationService:
@@ -40,9 +41,12 @@ class GenerationService:
             包含答案和相关信息的字典
         """
         # 检索相关文档
+        logger.info(f"🔍 开始检索相关文档...")
         results = self.retrieval_service.retrieve(question, top_k)
+        logger.info(f"✅ 检索完成，找到 {len(results)} 个相关文档块")
         
         if not results:
+            logger.warning(f"⚠️  未找到相关文档")
             return {
                 "answer": "抱歉，我没有找到相关的文档来回答这个问题。",
                 "sources": [],
@@ -50,13 +54,28 @@ class GenerationService:
             }
         
         # 构建上下文
+        logger.info(f"📝 构建上下文...")
         context = self._build_context(results)
+        logger.info(f"✅ 上下文构建完成，长度: {len(context)} 字符")
         
         # 构建提示词
+        logger.info(f"📝 构建提示词...")
         prompt = self._build_prompt(question, context)
+        logger.info(f"✅ 提示词构建完成，长度: {len(prompt)} 字符")
+        # 打印提示词前100字
+        logger.info(f"📝 提示词前100字: {prompt[:100]}")
         
         # 生成答案
-        answer = self.llm_service.generate(prompt)
+        logger.info(f"🤖 开始调用 LLM 生成答案...")
+        try:
+            import time
+            start_time = time.time()
+            answer = self.llm_service.generate(prompt)
+            elapsed_time = time.time() - start_time
+            logger.info(f"✅ LLM 生成完成，耗时 {elapsed_time:.2f} 秒，答案长度: {len(answer)} 字符")
+        except Exception as e:
+            logger.error(f"❌ LLM 生成失败: {e}", exc_info=True)
+            raise
         
         # 构建来源信息
         sources = [
@@ -103,7 +122,13 @@ class GenerationService:
 请直接列出{num_questions}个相关问题，每个问题一行，不要编号，不要额外解释。"""
         
         # 生成推荐问题
-        response = self.llm_service.generate(prompt, temperature=0.8)
+        logger.info(f"🤖 调用 LLM 生成推荐问题...")
+        try:
+            response = self.llm_service.generate(prompt, temperature=0.8)
+            logger.info(f"✅ LLM 推荐问题生成完成")
+        except Exception as e:
+            logger.error(f"❌ LLM 生成推荐问题失败: {e}", exc_info=True)
+            raise
         
         # 解析问题
         questions = [
@@ -136,11 +161,17 @@ class GenerationService:
         
         # 生成推荐问题
         if result["has_sources"]:
-            suggestions = self.suggest_questions(
-                question,
-                result["answer"],
-                num_questions=num_suggestions
-            )
+            try:
+                logger.info(f"💡 开始生成推荐问题...")
+                suggestions = self.suggest_questions(
+                    question,
+                    result["answer"],
+                    num_questions=num_suggestions
+                )
+                logger.info(f"✅ 推荐问题生成完成，共 {len(suggestions)} 个")
+            except Exception as e:
+                logger.warning(f"⚠️  生成推荐问题失败: {e}")
+                suggestions = []
         else:
             suggestions = []
         

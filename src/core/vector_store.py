@@ -129,6 +129,22 @@ class BaseVectorStore(ABC):
         """
         pass
     
+    def get_chunk_ids_by_document_id(self, document_id: str) -> List[str]:
+        """
+        根据文档 ID 查找所有相关的块 ID
+        
+        Args:
+            document_id: 文档 ID
+            
+        Returns:
+            块 ID 列表
+        """
+        # 默认实现：通过搜索所有向量来查找
+        # 子类可以覆盖此方法以提供更高效的实现
+        chunk_ids = []
+        # 这是一个占位实现，子类应该覆盖
+        return chunk_ids
+    
     @abstractmethod
     def close(self):
         """关闭连接"""

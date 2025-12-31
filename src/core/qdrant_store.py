@@ -236,6 +236,39 @@ class QdrantStore(BaseVectorStore):
             print(f"删除向量失败: {e}")
             return False
     
+    def get_chunk_ids_by_document_id(self, document_id: str) -> List[str]:
+        """
+        根据文档 ID 查找所有相关的块 ID
+        
+        Args:
+            document_id: 文档 ID
+            
+        Returns:
+            块 ID 列表
+        """
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            
+            # 使用过滤器查询
+            results = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="document_id",
+                            match=MatchValue(value=document_id)
+                        )
+                    ]
+                ),
+                limit=10000  # 假设一个文档最多有 10000 个块
+            )
+            
+            chunk_ids = [point.id for point in results[0]]
+            return chunk_ids
+        except Exception as e:
+            print(f"查找块 ID 失败: {e}")
+            return []
+    
     def get_vector_count(self) -> int:
         """
         获取向量数量

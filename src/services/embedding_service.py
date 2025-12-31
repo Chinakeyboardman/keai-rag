@@ -10,6 +10,7 @@ import numpy as np
 from pathlib import Path
 
 from config.settings import settings
+from src.utils.logger import logger
 
 
 class EmbeddingService:
@@ -36,21 +37,68 @@ class EmbeddingService:
     
     def _load_local_model(self):
         """加载本地模型"""
+        from sentence_transformers import SentenceTransformer
+        import os
+        
+        # 首先尝试使用配置的模型路径
+        model_path = settings.get_embedding_model_path()
+        if model_path and model_path.exists():
+            logger.info(f"📦 加载本地 Embedding 模型: {model_path}")
+            try:
+                # 设置环境变量强制离线模式
+                os.environ['HF_HUB_OFFLINE'] = '1'
+                self.model = SentenceTransformer(str(model_path), local_files_only=True)
+                logger.info(f"✅ Embedding 模型加载成功")
+                return
+            except Exception as e:
+                logger.warning(f"⚠️  使用配置路径加载失败: {e}")
+        
+        # 尝试从 HuggingFace 缓存加载
+        cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
+        model_cache_name = f"models--{self.model_name.replace('/', '--')}"
+        model_cache_path = os.path.join(cache_dir, model_cache_name, "snapshots")
+        
+        if os.path.exists(model_cache_path):
+            # 查找最新的快照
+            snapshots = [d for d in os.listdir(model_cache_path) if os.path.isdir(os.path.join(model_cache_path, d))]
+            if snapshots:
+                latest_snapshot = os.path.join(model_cache_path, snapshots[0])
+                logger.info(f"📦 从缓存加载 Embedding 模型: {latest_snapshot}")
+                try:
+                    os.environ['HF_HUB_OFFLINE'] = '1'
+                    self.model = SentenceTransformer(latest_snapshot, local_files_only=True)
+                    logger.info(f"✅ 从缓存加载模型成功")
+                    return
+                except Exception as e:
+                    logger.warning(f"⚠️  从缓存加载失败: {e}")
+        
+        # 最后尝试使用模型名称加载（会尝试连接网络）
+        logger.info(f"📦 尝试加载 Embedding 模型: {self.model_name}")
         try:
-            from sentence_transformers import SentenceTransformer
-            
-            model_path = settings.get_embedding_model_path()
-            if model_path and model_path.exists():
-                print(f"📦 加载本地 Embedding 模型: {model_path}")
-                self.model = SentenceTransformer(str(model_path))
-            else:
-                print(f"📦 下载 Embedding 模型: {self.model_name}")
-                self.model = SentenceTransformer(self.model_name)
-            
-            print(f"✅ Embedding 模型加载成功")
-            
+            # 先尝试离线模式
+            os.environ['HF_HUB_OFFLINE'] = '1'
+            self.model = SentenceTransformer(self.model_name, local_files_only=True)
+            logger.info(f"✅ 模型加载成功（离线模式）")
+            return
         except Exception as e:
-            raise RuntimeError(f"加载本地 Embedding 模型失败: {e}")
+            logger.warning(f"⚠️  离线加载失败: {e}")
+            # 如果离线失败，尝试在线下载（可能遇到速率限制）
+            try:
+                os.environ.pop('HF_HUB_OFFLINE', None)  # 移除离线模式
+                logger.info(f"📦 尝试在线下载模型...")
+                self.model = SentenceTransformer(self.model_name)
+                logger.info(f"✅ 模型下载并加载成功")
+                return
+            except Exception as e:
+                error_msg = (
+                    f"加载 Embedding 模型失败: {e}\n"
+                    f"提示: 如果遇到速率限制，请:\n"
+                    f"  1. 等待一段时间后重试\n"
+                    f"  2. 设置 HF_TOKEN 环境变量\n"
+                    f"  3. 或手动下载模型到缓存目录"
+                )
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
     
     def _setup_api_client(self):
         """设置 API 客户端"""
@@ -107,18 +155,26 @@ class EmbeddingService:
     def _embed_with_local_model(self, texts: List[str]) -> List[np.ndarray]:
         """使用本地模型进行向量化"""
         try:
+            if self.model is None:
+                raise RuntimeError("Embedding 模型未初始化")
+            
+            logger.info(f"🔄 开始向量化 {len(texts)} 个文本块（批量大小: {self.batch_size}）...")
+            
             # 批量编码
             embeddings = self.model.encode(
                 texts,
                 batch_size=self.batch_size,
-                show_progress_bar=False,
+                show_progress_bar=True,  # 显示进度条
                 convert_to_numpy=True
             )
+            
+            logger.info(f"✅ 向量化完成，生成 {len(embeddings)} 个向量")
             
             # 转换为列表
             return [emb.astype('float32') for emb in embeddings]
             
         except Exception as e:
+            logger.error(f"❌ 本地模型向量化失败: {e}", exc_info=True)
             raise RuntimeError(f"本地模型向量化失败: {e}")
     
     def _embed_with_api(self, texts: List[str]) -> List[np.ndarray]:

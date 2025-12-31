@@ -308,6 +308,36 @@ class FAISSStore(BaseVectorStore):
             print(f"删除向量失败: {e}")
             return False
     
+    def get_chunk_ids_by_document_id(self, document_id: str) -> List[str]:
+        """
+        根据文档 ID 查找所有相关的块 ID
+        
+        Args:
+            document_id: 文档 ID
+            
+        Returns:
+            块 ID 列表
+        """
+        chunk_ids = []
+        if self.index is None:
+            return chunk_ids
+        
+        for old_idx in range(self.index.ntotal):
+            if old_idx in self.metadata_store:
+                metadata_entry = self.metadata_store[old_idx]
+                # document_id 可能在 metadata 字典中，也可能在块 ID 中（格式：document_id_chunk_N）
+                metadata = metadata_entry.get("metadata", {})
+                vec_id = metadata_entry.get("id", "")
+                
+                # 方法1: 从 metadata 中查找
+                if metadata.get("document_id") == document_id:
+                    chunk_ids.append(vec_id)
+                # 方法2: 从块 ID 中提取（格式：document_id_chunk_N）
+                elif vec_id.startswith(f"{document_id}_chunk_"):
+                    chunk_ids.append(vec_id)
+        
+        return chunk_ids
+    
     def get_vector_count(self) -> int:
         """
         获取向量数量

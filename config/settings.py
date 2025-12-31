@@ -144,7 +144,10 @@ class Settings(BaseSettings):
     def get_embedding_model_path(self) -> Optional[Path]:
         """获取 Embedding 模型路径"""
         if self.is_local_embedding() and self.EMBEDDING_MODEL_PATH:
-            return Path(self.EMBEDDING_MODEL_PATH)
+            # 展开 ~ 路径
+            import os
+            expanded_path = os.path.expanduser(self.EMBEDDING_MODEL_PATH)
+            return Path(expanded_path)
         return None
     
     def get_llm_model_path(self) -> Optional[Path]:

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from PyPDF2 import PdfReader
 from .base import BaseDocumentProcessor
+from src.utils.logger import logger
 
 
 class PDFProcessor(BaseDocumentProcessor):
@@ -35,18 +36,31 @@ class PDFProcessor(BaseDocumentProcessor):
             提取的文本内容
         """
         try:
+            logger.info(f"📄 打开 PDF 文件: {file_path}")
             reader = PdfReader(str(file_path))
+            total_pages = len(reader.pages)
+            logger.info(f"📄 PDF 总页数: {total_pages}")
+            
             text_parts = []
             
             for page_num, page in enumerate(reader.pages, start=1):
-                page_text = page.extract_text()
-                if page_text and page_text.strip():
-                    text_parts.append(page_text)
+                if page_num % 10 == 0 or page_num == 1:
+                    logger.info(f"📄 处理第 {page_num}/{total_pages} 页...")
+                
+                try:
+                    page_text = page.extract_text()
+                    if page_text and page_text.strip():
+                        text_parts.append(page_text)
+                except Exception as e:
+                    logger.warning(f"⚠️  第 {page_num} 页提取失败: {e}")
+                    continue
             
             full_text = "\n\n".join(text_parts)
+            logger.info(f"✅ PDF 文本提取完成，共 {len(text_parts)} 页有内容，总字符数: {len(full_text)}")
             return full_text
             
         except Exception as e:
+            logger.error(f"❌ 提取 PDF 文本失败: {e}", exc_info=True)
             raise RuntimeError(f"提取 PDF 文本失败: {e}")
     
     def extract_metadata(self, file_path: Path) -> Dict[str, Any]:

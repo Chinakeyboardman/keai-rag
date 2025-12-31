@@ -124,16 +124,27 @@ class BaseDocumentProcessor(ABC):
         Returns:
             文本块列表
         """
+        from src.utils.logger import logger
+        
         if not text or not text.strip():
             return []
         
         chunks = []
         start = 0
         text_length = len(text)
+        max_iterations = text_length // max(1, self.chunk_size - self.chunk_overlap) + 10  # 防止死循环
+        iteration = 0
+        
+        logger.info(f"✂️  文本分割参数: chunk_size={self.chunk_size}, chunk_overlap={self.chunk_overlap}, text_length={text_length}")
         
         while start < text_length:
+            iteration += 1
+            if iteration > max_iterations:
+                logger.error(f"❌ 文本分割可能陷入死循环，已处理 {len(chunks)} 个块，当前位置: {start}/{text_length}")
+                break
+            
             # 计算结束位置
-            end = start + self.chunk_size
+            end = min(start + self.chunk_size, text_length)
             
             # 如果不是最后一块，尝试在合适的位置分割
             if end < text_length:
@@ -149,14 +160,27 @@ class BaseDocumentProcessor(ABC):
                 
                 end = best_split
             
+            # 确保 end > start，防止空块
+            if end <= start:
+                logger.warning(f"⚠️  检测到 end <= start ({end} <= {start})，强制推进")
+                end = start + 1
+            
             # 提取块
             chunk = text[start:end].strip()
             if chunk:
                 chunks.append(chunk)
             
             # 更新起始位置（考虑重叠）
-            start = end - self.chunk_overlap if end < text_length else text_length
+            # 确保 start 总是增加的，防止死循环
+            new_start = end - self.chunk_overlap if end < text_length else text_length
+            if new_start <= start:
+                # 如果新位置没有推进，至少推进1个字符
+                new_start = start + 1
+                logger.warning(f"⚠️  检测到位置未推进，强制推进到 {new_start}")
+            
+            start = new_start
         
+        logger.info(f"✅ 文本分割完成，共 {len(chunks)} 个块，迭代次数: {iteration}")
         return chunks
     
     def process(self, file_path: Path, document_id: str) -> Document:
@@ -178,13 +202,22 @@ class BaseDocumentProcessor(ABC):
             raise ValueError(f"不支持的文件类型: {file_path.suffix}")
         
         # 提取文本和元数据
+        from src.utils.logger import logger
+        logger.info(f"📝 开始提取文本...")
         text = self.extract_text(file_path)
+        logger.info(f"✅ 文本提取完成，长度: {len(text)} 字符")
+        
+        logger.info(f"📋 开始提取元数据...")
         metadata = self.extract_metadata(file_path)
+        logger.info(f"✅ 元数据提取完成")
         
         # 分割文本
+        logger.info(f"✂️  开始分割文本，文本长度: {len(text)} 字符")
         text_chunks = self.split_text(text)
+        logger.info(f"✅ 文本分割完成，共 {len(text_chunks)} 个文本块")
         
         # 创建文档块
+        logger.info(f"📦 开始创建文档块...")
         chunks = []
         for i, chunk_text in enumerate(text_chunks):
             chunk = DocumentChunk(
@@ -200,8 +233,10 @@ class BaseDocumentProcessor(ABC):
                 chunk_index=i
             )
             chunks.append(chunk)
+        logger.info(f"✅ 文档块创建完成，共 {len(chunks)} 个块")
         
         # 创建文档对象
+        logger.info(f"📄 创建文档对象...")
         document = Document(
             document_id=document_id,
             file_name=file_path.name,
