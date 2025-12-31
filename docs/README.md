@@ -22,6 +22,32 @@
 
 ---
 
+#### [START_SERVER.md](./START_SERVER.md) - 启动服务指南
+**适合人群**: 开发者、运维人员  
+**阅读时间**: 10-15 分钟  
+**内容概要**:
+- 详细的启动步骤
+- 配置检查清单
+- 测试验证方法
+- 常见问题排查
+
+**推荐**: 准备启动服务时必读！
+
+---
+
+#### [QUICK_FIX.md](./QUICK_FIX.md) - 快速修复指南
+**适合人群**: 所有用户  
+**阅读时间**: 5 分钟  
+**内容概要**:
+- 依赖安装问题
+- 配置调整方案
+- 快速修复步骤
+- 最小测试配置
+
+**推荐**: 遇到问题时查看！
+
+---
+
 ### 🏗️ 架构与设计
 
 #### [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) - 项目结构说明
@@ -78,24 +104,56 @@
 
 ---
 
+#### [STAGE2_COMPLETED.md](./STAGE2_COMPLETED.md) - 阶段二完成报告
+**适合人群**: 开发者  
+**阅读时间**: 15-20 分钟  
+**内容概要**:
+- 核心模块开发总结
+- 7个核心模块详解
+- 代码统计和技术亮点
+- 使用示例
+
+**推荐**: 了解核心模块实现！
+
+---
+
+#### [PROJECT_COMPLETED.md](./PROJECT_COMPLETED.md) - 项目完成报告
+**适合人群**: 所有人  
+**阅读时间**: 20-30 分钟  
+**内容概要**:
+- 完整项目总结
+- 所有阶段成果
+- 技术栈和架构
+- 使用指南和扩展计划
+
+**推荐**: 全面了解整个项目！
+
+---
+
 ## 🎯 推荐阅读路径
 
-### 路径 1: 快速使用（5 分钟）
+### 路径 1: 快速使用（10 分钟）
 ```
-README.md → QUICKSTART.md → 开始使用
+README.md → QUICKSTART.md → START_SERVER.md → 开始使用
 ```
 适合：只想快速试用系统的用户
 
-### 路径 2: 深入了解（30 分钟）
+### 路径 2: 遇到问题（5 分钟）
+```
+QUICK_FIX.md → 解决问题 → START_SERVER.md → 启动服务
+```
+适合：遇到安装或配置问题的用户
+
+### 路径 3: 深入了解（30 分钟）
 ```
 README.md → QUICKSTART.md → PROJECT_STRUCTURE.md → checklist.md
 ```
 适合：想全面了解项目的开发者
 
-### 路径 3: 参与开发（1 小时）
+### 路径 4: 参与开发（1 小时）
 ```
-README.md → QUICKSTART.md → PROJECT_STRUCTURE.md → 
-checklist.md → STAGE1_COMPLETED.md → 开始开发
+README.md → PROJECT_STRUCTURE.md → checklist.md → 
+STAGE1_COMPLETED.md → STAGE2_COMPLETED.md → 开始开发
 ```
 适合：准备参与项目开发的贡献者
 
@@ -105,13 +163,17 @@ checklist.md → STAGE1_COMPLETED.md → 开始开发
 
 | 文档 | 大小 | 行数 | 最后更新 |
 |------|------|------|----------|
-| README.md（主文档） | 2.4KB | ~100 | 2025-12-31 |
+| README.md（主文档） | 2.7KB | ~110 | 2025-12-31 |
 | QUICKSTART.md | 5.6KB | ~200 | 2025-12-31 |
+| START_SERVER.md | 6.5KB | ~280 | 2025-12-31 |
+| QUICK_FIX.md | 5.0KB | ~220 | 2025-12-31 |
 | PROJECT_STRUCTURE.md | 8.5KB | ~300 | 2025-12-31 |
 | checklist.md | 11KB | ~340 | 2025-12-31 |
 | STAGE1_COMPLETED.md | 7.0KB | ~250 | 2025-12-31 |
+| STAGE2_COMPLETED.md | 8.0KB | ~280 | 2025-12-31 |
+| PROJECT_COMPLETED.md | 12KB | ~450 | 2025-12-31 |
 
-**总计**: ~35KB 文档，覆盖项目各个方面
+**总计**: ~66KB 文档，覆盖项目各个方面
 
 ---
 
@@ -122,6 +184,12 @@ checklist.md → STAGE1_COMPLETED.md → 开始开发
 **如何快速开始？**  
 → 阅读 [QUICKSTART.md](./QUICKSTART.md)
 
+**如何启动服务？**  
+→ 阅读 [START_SERVER.md](./START_SERVER.md)
+
+**遇到问题怎么办？**  
+→ 查看 [QUICK_FIX.md](./QUICK_FIX.md)
+
 **项目是如何组织的？**  
 → 阅读 [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
 
@@ -129,16 +197,13 @@ checklist.md → STAGE1_COMPLETED.md → 开始开发
 → 阅读 [checklist.md](./checklist.md)
 
 **当前项目进度如何？**  
-→ 阅读 [STAGE1_COMPLETED.md](./STAGE1_COMPLETED.md)
+→ 阅读 [PROJECT_COMPLETED.md](./PROJECT_COMPLETED.md)
 
 **有哪些技术选型？**  
 → 阅读 [checklist.md](./checklist.md) 中的"技术选型"章节
 
 **如何配置环境变量？**  
-→ 阅读 [QUICKSTART.md](./QUICKSTART.md) 或 [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
-
-**遇到问题怎么办？**  
-→ 查看 [QUICKSTART.md](./QUICKSTART.md) 中的"常见问题"部分
+→ 阅读 [QUICK_FIX.md](./QUICK_FIX.md) 或 [START_SERVER.md](./START_SERVER.md)
 
 ---
 
@@ -156,17 +221,22 @@ checklist.md → STAGE1_COMPLETED.md → 开始开发
 
 ### 2025-12-31
 - ✅ 创建所有初始文档
-- ✅ 完成阶段一开发
+- ✅ 完成阶段一、二、三、四、五开发
 - ✅ 更新 checklist.md 状态
 - ✅ 添加文档索引（本文档）
+- ✅ 添加启动和修复指南
+- ✅ 整理所有文档到 docs/ 目录
 
 ---
 
 ## 🌟 下一步
 
 1. 如果您是新用户，建议从 [QUICKSTART.md](./QUICKSTART.md) 开始
-2. 如果您想深入了解，继续阅读 [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
-3. 如果您想参与开发，查看 [checklist.md](./checklist.md) 了解任务清单
+2. 如果您遇到问题，查看 [QUICK_FIX.md](./QUICK_FIX.md)
+3. 如果您要启动服务，阅读 [START_SERVER.md](./START_SERVER.md)
+4. 如果您想深入了解，继续阅读 [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
+5. 如果您想参与开发，查看 [checklist.md](./checklist.md) 了解任务清单
+6. 如果您想了解项目全貌，查看 [PROJECT_COMPLETED.md](./PROJECT_COMPLETED.md)
 
 **祝您使用愉快！** 🚀
 

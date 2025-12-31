@@ -98,7 +98,9 @@ china-pdf-rag/
 - [快速开始指南](docs/QUICKSTART.md) - 5分钟快速上手
 - [项目结构说明](docs/PROJECT_STRUCTURE.md) - 详细的架构和模块说明
 - [开发计划清单](docs/checklist.md) - 完整的开发任务和进度
-- [阶段一完成报告](docs/STAGE1_COMPLETED.md) - 项目初始化总结
+- [启动服务指南](docs/START_SERVER.md) - 详细的启动步骤
+- [快速修复指南](docs/QUICK_FIX.md) - 常见问题解决
+- [项目完成报告](docs/PROJECT_COMPLETED.md) - 完整项目总结
 
 ## 环境要求
 
