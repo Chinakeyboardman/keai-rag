@@ -1,0 +1,57 @@
+# Web 框架
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# LangChain 相关
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-openai>=0.0.5
+
+# PDF 处理
+PyPDF2>=3.0.0
+pdfplumber>=0.10.3
+
+# 向量数据库
+faiss-cpu>=1.7.4
+qdrant-client>=1.7.0
+
+# 数据处理
+numpy>=1.21.0
+pandas>=2.0.0
+
+# 模型相关
+transformers>=4.36.0
+torch>=2.1.0
+sentence-transformers>=2.2.0
+openai>=1.0.0
+
+# 配置管理
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+
+# 数据库
+sqlalchemy>=2.0.0
+
+# 工具库
+tqdm>=4.65.0
+requests>=2.31.0
+
+# 日志
+loguru>=0.7.2
+
+# 测试
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+httpx>=0.25.0
+
+# 代码质量
+black>=23.12.0
+flake8>=7.0.0
+mypy>=1.8.0
+
+# Jupyter（可选）
+ipywidgets>=8.0.0
+jupyter>=1.0.0
+
