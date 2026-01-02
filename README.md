@@ -16,6 +16,7 @@
 - 💡 **问题推荐**：自动生成相关问题建议
 - 🔄 **降级方案**：Qdrant 主选，FAISS 降级
 - 🇨🇳 **国内可用**：使用国内可访问的模型和服务
+- ✂️ **智能切片**：支持可配置的文本分块策略
 
 ## 技术栈
 
@@ -49,6 +50,32 @@ pip install -r requirements.txt
 cp .env.example .env
 # 编辑 .env 文件，配置必要的参数
 ```
+
+#### 切片策略配置
+
+在 `.env` 文件中可以配置文本切片参数：
+
+```bash
+# 文本分块大小（字符数），默认 1000
+CHUNK_SIZE=1000
+
+# 文本分块重叠大小（字符数），默认 200
+CHUNK_OVERLAP=200
+```
+
+**切片策略说明**：
+- **chunk_size**：每个文本块的目标大小（字符数）
+- **chunk_overlap**：相邻文本块之间的重叠大小，用于保持上下文连续性
+- **智能分割**：系统会优先在以下位置进行分割：
+  - 段落分隔符（`\n\n`）
+  - 换行符（`\n`）
+  - 中文标点：`。`、`！`、`？`
+  - 英文标点：`.`、`!`、`?`
+
+**推荐配置**：
+- 小文档（<10页）：`CHUNK_SIZE=500, CHUNK_OVERLAP=100`
+- 中等文档（10-50页）：`CHUNK_SIZE=1000, CHUNK_OVERLAP=200`（默认）
+- 大文档（>50页）：`CHUNK_SIZE=1500, CHUNK_OVERLAP=300`
 
 ### 3. 初始化数据库
 
@@ -107,6 +134,9 @@ china-pdf-rag/
 - [启动服务指南](docs/START_SERVER.md) - 详细的启动步骤
 - [快速修复指南](docs/QUICK_FIX.md) - 常见问题解决
 - [项目完成报告](docs/PROJECT_COMPLETED.md) - 完整项目总结
+- [**文本切片策略**](docs/CHUNKING_STRATEGY.md) - 详细的文本分块策略说明
+- [架构优化方案](docs/ARCHITECTURE_OPTIMIZATION.md) - 高并发与分布式优化
+- [GraphRAG升级方案](docs/GRAPH_RAG_UPGRADE.md) - 知识图谱增强方案
 
 ## 环境要求
 
