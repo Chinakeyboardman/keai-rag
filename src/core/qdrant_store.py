@@ -211,23 +211,79 @@ class QdrantStore(BaseVectorStore):
                 if conditions:
                     query_filter = Filter(must=conditions)
             
-            # 搜索
-            search_result = self.client.search(
-                collection_name=self.collection_name,
-                query_vector=query_vector.tolist(),
-                limit=top_k,
-                query_filter=query_filter
-            )
+            # 搜索 - 使用 query_points 方法（Qdrant标准API）
+            from src.utils.logger import logger
+            
+            try:
+                # Qdrant客户端使用 query_points 方法进行搜索
+                search_result = self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=query_vector.tolist(),  # 直接传入向量列表
+                    limit=top_k,
+                    query_filter=query_filter
+                )
+                
+                # query_points 返回 ScoredPoint 对象列表
+                hits = search_result.points if hasattr(search_result, 'points') else search_result
+                
+            except TypeError as e1:
+                # 如果直接传向量列表不行，尝试使用 Query 对象
+                logger.warning(f"直接传向量失败，尝试Query对象: {e1}")
+                try:
+                    from qdrant_client.models import Query
+                    search_result = self.client.query_points(
+                        collection_name=self.collection_name,
+                        query=Query(vector=query_vector.tolist()),
+                        limit=top_k,
+                        query_filter=query_filter
+                    )
+                    hits = search_result.points if hasattr(search_result, 'points') else search_result
+                except Exception as e2:
+                    logger.error(f"Qdrant搜索失败（Query方式）: {e2}")
+                    # 最后尝试：使用 search 方法（如果存在，旧版本API）
+                    try:
+                        if hasattr(self.client, 'search'):
+                            search_result = self.client.search(
+                                collection_name=self.collection_name,
+                                query_vector=query_vector.tolist(),
+                                limit=top_k,
+                                query_filter=query_filter
+                            )
+                            hits = search_result
+                        else:
+                            logger.error("Qdrant客户端没有search方法")
+                            hits = []
+                    except Exception as e3:
+                        logger.error(f"Qdrant搜索失败（所有方法）: {e3}")
+                        hits = []
+            except Exception as e:
+                logger.error(f"Qdrant搜索失败: {e}")
+                hits = []
             
             # 构建结果
             results = []
-            for hit in search_result:
+            for hit in hits:
+                # 处理不同版本的返回格式
+                if hasattr(hit, 'id'):
+                    hit_id = str(hit.id)
+                    hit_score = hit.score if hasattr(hit, 'score') else 0.0
+                    hit_payload = hit.payload if hasattr(hit, 'payload') else {}
+                elif isinstance(hit, dict):
+                    hit_id = str(hit.get('id', ''))
+                    hit_score = hit.get('score', 0.0)
+                    hit_payload = hit.get('payload', {})
+                else:
+                    continue
+                
                 result = VectorSearchResult(
-                    id=str(hit.id),
-                    score=hit.score,
-                    text=hit.payload.get("text", ""),
-                    metadata={k: v for k, v in hit.payload.items() if k != "text"}
+                    id=hit_id,
+                    score=hit_score,
+                    text=hit_payload.get("text", ""),
+                    metadata={k: v for k, v in hit_payload.items() if k not in ["text", "original_id"]}
                 )
+                # 如果存在 original_id，使用它作为 ID
+                if "original_id" in hit_payload:
+                    result.id = hit_payload["original_id"]
                 results.append(result)
             
             return results
