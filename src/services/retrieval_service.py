@@ -53,18 +53,70 @@ class RetrievalService:
         else:
             top_k = max(top_k, 15)  # 确保至少检索15个结果
         
-        # 向量化查询
-        query_vector = self.embedding_service.embed_text(query)
+        # 查询扩展：对于短查询（特别是数字编号），扩展查询以提供更多上下文
+        expanded_query = self._expand_query(query)
+        if expanded_query != query:
+            from src.utils.logger import logger
+            logger.info(f"🔍 查询扩展: \"{query}\" -> \"{expanded_query}\"")
+        
+        # 向量化查询（使用扩展后的查询）
+        query_vector = self.embedding_service.embed_text(expanded_query)
         
         # 向量搜索（大幅增加检索数量以确保不遗漏）
         # 检索所有可能的文档块（如果总数不多的话）
+        search_k = min(top_k * 3, 100)  # 检索更多结果，最多100个，确保不遗漏
         vector_results = self.vector_store.search(
             query_vector=query_vector,
-            top_k=min(top_k * 3, 50),  # 检索更多结果，最多50个
+            top_k=search_k,
             filter_dict=filter_dict
         )
         
-        # 关键词增强：如果向量检索结果较少，尝试关键词匹配
+        # 关键词增强：提升包含查询关键词的结果的优先级
+        # 提取查询中的关键短语（如"第十一条"、"申报时间"等）
+        query_lower = query.lower()
+        important_phrases = []
+        
+        # 检测数字编号（如"第十一条"、"第一条"等）
+        import re
+        number_patterns = re.findall(r'第[一二三四五六七八九十百千万\d]+条', query)
+        important_phrases.extend(number_patterns)
+        
+        # 检测其他重要关键词（长度>=2的中文词）
+        chinese_words = re.findall(r'[\u4e00-\u9fa5]{2,}', query)
+        important_phrases.extend([w for w in chinese_words if len(w) >= 2])
+        
+        # 如果找到重要短语，提升包含这些短语的结果的分数
+        if important_phrases:
+            from src.utils.logger import logger
+            logger.info(f"🔍 检测到重要短语: {important_phrases}")
+            
+            boosted_results = []
+            exact_match_results = []
+            
+            for result in vector_results:
+                text_lower = result.text.lower()
+                # 检查是否包含重要短语
+                contains_phrase = any(phrase in text_lower or phrase in result.text for phrase in important_phrases)
+                
+                if contains_phrase:
+                    # 包含重要短语的结果，提升分数并优先返回
+                    # 创建一个新的结果对象，分数提升0.3（确保排在前面）
+                    from src.core.vector_store import VectorSearchResult
+                    boosted_result = VectorSearchResult(
+                        id=result.id,
+                        score=result.score + 0.3,  # 提升分数
+                        text=result.text,
+                        metadata=result.metadata
+                    )
+                    exact_match_results.append(boosted_result)
+                else:
+                    boosted_results.append(result)
+            
+            # 合并结果：先返回包含重要短语的，再返回其他结果
+            vector_results = exact_match_results + boosted_results
+            logger.info(f"✅ 关键词增强: {len(exact_match_results)} 个结果包含重要短语，已提升优先级")
+        
+        # 如果向量检索结果较少，尝试关键词匹配
         if len(vector_results) < top_k:
             # 提取查询关键词
             keywords = self._extract_keywords(query)
@@ -76,6 +128,34 @@ class RetrievalService:
         
         # 返回top_k个结果
         return vector_results[:top_k]
+    
+    def _expand_query(self, query: str) -> str:
+        """
+        查询扩展：对于短查询（特别是数字编号），扩展查询以提供更多上下文
+        
+        Args:
+            query: 原始查询
+            
+        Returns:
+            扩展后的查询
+        """
+        import re
+        
+        # 如果查询很短（少于10个字符），尝试扩展
+        if len(query.strip()) < 10:
+            # 检测数字编号（如"第十一条"、"第一条"等）
+            number_pattern = re.search(r'第[一二三四五六七八九十百千万\d]+条', query)
+            if number_pattern:
+                # 找到编号，扩展查询：添加"规定"、"内容"、"条款"等上下文词
+                expanded = f"{query} 规定 内容 条款 说明"
+                return expanded
+        
+        # 如果查询只包含数字编号，也进行扩展
+        if re.match(r'^第[一二三四五六七八九十百千万\d]+条\s*$', query.strip()):
+            expanded = f"{query} 规定 内容 条款 说明"
+            return expanded
+        
+        return query
     
     def _extract_keywords(self, query: str) -> List[str]:
         """提取查询关键词"""

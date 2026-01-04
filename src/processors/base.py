@@ -134,7 +134,6 @@ class BaseDocumentProcessor(ABC):
         text_length = len(text)
         max_iterations = text_length // max(1, self.chunk_size - self.chunk_overlap) + 10  # 防止死循环
         iteration = 0
-        min_chunk_size = 20  # 最小块大小，过滤太短的块
         
         logger.info(f"✂️  文本分割参数: chunk_size={self.chunk_size}, chunk_overlap={self.chunk_overlap}, text_length={text_length}")
         
@@ -166,11 +165,11 @@ class BaseDocumentProcessor(ABC):
                 logger.warning(f"⚠️  检测到 end <= start ({end} <= {start})，强制推进")
                 end = start + 1
             
-            # 提取块
+            # 提取块（保留所有文本，不进行过滤）
             chunk = text[start:end].strip()
             
-            # 只添加长度大于最小块大小的块
-            if chunk and len(chunk) >= min_chunk_size:
+            # 保留所有非空块（不进行长度过滤，确保重要内容不被丢弃）
+            if chunk:
                 chunks.append(chunk)
             
             # 计算块的实际长度
@@ -198,9 +197,9 @@ class BaseDocumentProcessor(ABC):
             
             # 确保不会超过文本长度
             if new_start >= text_length:
-                # 如果还有剩余文本，创建一个最后的块
+                # 如果还有剩余文本，创建一个最后的块（保留所有剩余文本）
                 remaining = text[start:].strip()
-                if remaining and len(remaining) >= min_chunk_size:
+                if remaining:
                     chunks.append(remaining)
                 break
             

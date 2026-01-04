@@ -234,7 +234,7 @@ class GenerationService:
         context_parts = []
         for i, result in enumerate(selected_results, 1):
             context_parts.append(
-                f"[文档块 {i} - 相似度: {result.score:.4f}]\n{result.text}"
+                f"[文档 {i}]\n{result.text}"
             )
         
         return "\n\n".join(context_parts)
