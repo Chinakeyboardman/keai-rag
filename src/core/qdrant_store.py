@@ -155,7 +155,13 @@ class QdrantStore(BaseVectorStore):
             
             # 构建点数据
             points = []
-            for qdrant_id, original_id, vector, text, metadata in zip(qdrant_ids, ids, vectors, texts, metadatas):
+            for i, (qdrant_id, original_id, vector, text, metadata) in enumerate(zip(qdrant_ids, ids, vectors, texts, metadatas)):
+                # 验证数据一致性
+                chunk_index = metadata.get('chunk_index', -1)
+                text_preview = text[:50] + '...' if len(text) > 50 else text
+                
+                logger.debug(f"   构建点 {i}: chunk_index={chunk_index}, original_id={original_id[:30]}..., text_preview={text_preview}")
+                
                 payload = {
                     "text": text,
                     "original_id": original_id,  # 保存原始 ID
@@ -168,15 +174,71 @@ class QdrantStore(BaseVectorStore):
                 )
                 points.append(point)
             
-            # 批量插入
-            self.client.upsert(
-                collection_name=self.collection_name,
-                points=points
-            )
+            # 记录前3个和后3个点的信息用于验证
+            logger.info(f"📋 插入前3个点预览:")
+            for i, point in enumerate(points[:3]):
+                chunk_idx = point.payload.get('chunk_index', -1)
+                text_preview = point.payload.get('text', '')[:100]
+                logger.info(f"   点{i}: chunk_index={chunk_idx}, text={text_preview}...")
             
-            return True
+            if len(points) > 3:
+                logger.info(f"📋 插入后3个点预览:")
+                for i, point in enumerate(points[-3:], len(points)-3):
+                    chunk_idx = point.payload.get('chunk_index', -1)
+                    text_preview = point.payload.get('text', '')[:100]
+                    logger.info(f"   点{i}: chunk_index={chunk_idx}, text={text_preview}...")
+            
+            # 批量插入
+            logger.info(f"📤 准备插入 {len(points)} 个向量到 Qdrant...")
+            logger.info(f"   集合名称: {self.collection_name}")
+            logger.info(f"   向量维度: {len(vectors[0]) if vectors else 0}")
+            
+            # 验证向量维度
+            for i, vector in enumerate(vectors):
+                if len(vector) != self.dimension:
+                    error_msg = f"向量 {i} 的维度({len(vector)})与集合维度({self.dimension})不匹配"
+                    logger.error(f"❌ {error_msg}")
+                    raise ValueError(error_msg)
+            
+            try:
+                self.client.upsert(
+                    collection_name=self.collection_name,
+                    points=points
+                )
+                logger.info(f"✅ 成功插入 {len(points)} 个向量到 Qdrant")
+                
+                # 验证插入结果
+                collection_info = self.client.get_collection(self.collection_name)
+                total_points = collection_info.points_count
+                logger.info(f"📊 Qdrant集合当前总向量数: {total_points}")
+                
+                return True
+            except Exception as upsert_error:
+                logger.error(f"❌ Qdrant upsert 失败: {upsert_error}", exc_info=True)
+                # 尝试逐个插入以找出问题
+                logger.info(f"🔄 尝试逐个插入以诊断问题...")
+                success_count = 0
+                for i, point in enumerate(points):
+                    try:
+                        self.client.upsert(
+                            collection_name=self.collection_name,
+                            points=[point]
+                        )
+                        success_count += 1
+                    except Exception as point_error:
+                        logger.error(f"❌ 插入点 {i} 失败: {point_error}")
+                        logger.error(f"   点ID: {point.id}")
+                        logger.error(f"   文本: {point.payload.get('text', '')[:100]}...")
+                        raise point_error
+                
+                if success_count == len(points):
+                    logger.info(f"✅ 逐个插入成功，共 {success_count} 个向量")
+                    return True
+                else:
+                    raise RuntimeError(f"部分向量插入失败: {success_count}/{len(points)}")
+            
         except Exception as e:
-            print(f"插入向量失败: {e}")
+            logger.error(f"❌ 插入向量失败: {e}", exc_info=True)
             return False
     
     def search(
@@ -216,15 +278,28 @@ class QdrantStore(BaseVectorStore):
             
             try:
                 # Qdrant客户端使用 query_points 方法进行搜索
+                # 注意：query_points 的 query 参数应该是 NamedVector 或直接向量列表
+                # 对于默认向量，可以直接传入向量列表
+                vector_list = query_vector.tolist()
+                
+                logger.debug(f"🔍 Qdrant搜索: 集合={self.collection_name}, top_k={top_k}, 向量维度={len(vector_list)}")
+                
                 search_result = self.client.query_points(
                     collection_name=self.collection_name,
-                    query=query_vector.tolist(),  # 直接传入向量列表
+                    query=vector_list,  # 直接传入向量列表
                     limit=top_k,
                     query_filter=query_filter
                 )
                 
-                # query_points 返回 ScoredPoint 对象列表
-                hits = search_result.points if hasattr(search_result, 'points') else search_result
+                # query_points 返回 QueryResponse 对象，包含 points 属性
+                if hasattr(search_result, 'points'):
+                    hits = search_result.points
+                elif isinstance(search_result, list):
+                    hits = search_result
+                else:
+                    hits = []
+                
+                logger.debug(f"✅ Qdrant搜索完成，找到 {len(hits)} 个结果")
                 
             except TypeError as e1:
                 # 如果直接传向量列表不行，尝试使用 Query 对象

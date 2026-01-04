@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # ==================== 文档处理配置 ====================
     CHUNK_SIZE: int = Field(default=1000, env="CHUNK_SIZE")
     CHUNK_OVERLAP: int = Field(default=200, env="CHUNK_OVERLAP")
-    RETRIEVAL_TOP_K: int = Field(default=3, env="RETRIEVAL_TOP_K")
+    RETRIEVAL_TOP_K: int = Field(default=10, env="RETRIEVAL_TOP_K")  # 增加到10以提高召回率
     
     # ==================== 数据存储路径 ====================
     DATA_DIR: str = Field(default="./data", env="DATA_DIR")

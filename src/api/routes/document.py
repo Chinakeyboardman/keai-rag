@@ -107,6 +107,23 @@ async def upload_document(
         ids = [chunk.chunk_id for chunk in document.chunks]
         logger.info(f"✅ 已提取 {len(texts)} 个文本块")
         
+        # 记录每个块的信息用于验证
+        logger.info(f"📋 块信息预览（前3个和后3个）:")
+        for i, chunk in enumerate(document.chunks[:3]):
+            logger.info(f"   块{i}: chunk_index={chunk.chunk_index}, chunk_id={chunk.chunk_id[:30]}..., "
+                      f"text_length={len(chunk.text)}, text_preview={chunk.text[:50]}...")
+        if len(document.chunks) > 3:
+            for i, chunk in enumerate(document.chunks[-3:], len(document.chunks)-3):
+                logger.info(f"   块{i}: chunk_index={chunk.chunk_index}, chunk_id={chunk.chunk_id[:30]}..., "
+                          f"text_length={len(chunk.text)}, text_preview={chunk.text[:50]}...")
+        
+        # 检查是否有包含目标文本的块
+        target_keywords = ["每年一月份", "申报时间", "第十一条"]
+        for i, chunk in enumerate(document.chunks):
+            if any(keyword in chunk.text for keyword in target_keywords):
+                logger.info(f"✅ 找到包含目标关键词的块: chunk_index={chunk.chunk_index}, "
+                          f"text_preview={chunk.text[:100]}...")
+        
         # 批量向量化
         logger.info(f"⏳ 正在向量化 {len(texts)} 个文本块...")
         try:
@@ -121,15 +138,39 @@ async def upload_document(
         
         # 插入向量存储
         logger.info(f"💾 插入向量存储...")
+        logger.info(f"   准备插入 {len(vectors)} 个向量")
+        logger.info(f"   向量维度: {len(vectors[0]) if vectors else 0}")
+        logger.info(f"   文本数量: {len(texts)}")
+        logger.info(f"   元数据数量: {len(metadatas)}")
+        logger.info(f"   ID数量: {len(ids)}")
+        
+        # 验证数据一致性
+        if not (len(vectors) == len(texts) == len(metadatas) == len(ids)):
+            error_msg = f"数据不一致: 向量({len(vectors)})、文本({len(texts)})、元数据({len(metadatas)})、ID({len(ids)})"
+            logger.error(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+        
         try:
             start_time = time.time()
             success = store.insert_vectors(vectors, texts, metadatas, ids)
             elapsed_time = time.time() - start_time
+            
             if success:
                 logger.info(f"✅ 向量存储完成，耗时 {elapsed_time:.2f} 秒")
+                
+                # 验证存储结果
+                try:
+                    stored_count = store.get_vector_count()
+                    logger.info(f"📊 向量存储验证: 集合中现有 {stored_count} 个向量")
+                    if stored_count < len(vectors):
+                        logger.warning(f"⚠️  存储的向量数量({stored_count})少于预期({len(vectors)})")
+                except Exception as verify_error:
+                    logger.warning(f"⚠️  无法验证存储结果: {verify_error}")
             else:
-                logger.error(f"❌ 向量存储失败")
+                logger.error(f"❌ 向量存储失败（返回False）")
                 raise HTTPException(status_code=500, detail="向量存储失败")
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"❌ 向量存储异常: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"向量存储失败: {str(e)}")

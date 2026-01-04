@@ -134,6 +134,7 @@ class BaseDocumentProcessor(ABC):
         text_length = len(text)
         max_iterations = text_length // max(1, self.chunk_size - self.chunk_overlap) + 10  # 防止死循环
         iteration = 0
+        min_chunk_size = 20  # 最小块大小，过滤太短的块
         
         logger.info(f"✂️  文本分割参数: chunk_size={self.chunk_size}, chunk_overlap={self.chunk_overlap}, text_length={text_length}")
         
@@ -167,16 +168,41 @@ class BaseDocumentProcessor(ABC):
             
             # 提取块
             chunk = text[start:end].strip()
-            if chunk:
+            
+            # 只添加长度大于最小块大小的块
+            if chunk and len(chunk) >= min_chunk_size:
                 chunks.append(chunk)
             
+            # 计算块的实际长度
+            chunk_length = end - start
+            
             # 更新起始位置（考虑重叠）
-            # 确保 start 总是增加的，防止死循环
-            new_start = end - self.chunk_overlap if end < text_length else text_length
+            # 如果块长度小于overlap，直接跳过重叠，从end开始
+            if chunk_length < self.chunk_overlap:
+                # 块太短，直接跳到end，不重叠
+                new_start = end
+            else:
+                # 正常情况，使用overlap
+                new_start = end - self.chunk_overlap
+            
+            # 确保 new_start 总是大于 start，防止死循环
             if new_start <= start:
-                # 如果新位置没有推进，至少推进1个字符
-                new_start = start + 1
-                logger.warning(f"⚠️  检测到位置未推进，强制推进到 {new_start}")
+                # 至少推进块长度的一半，或至少推进chunk_size的1/4，确保有足够的推进
+                min_advance = max(
+                    self.chunk_size // 4,  # 至少推进chunk_size的1/4
+                    chunk_length // 2 if chunk_length > 0 else 1,  # 或块长度的一半
+                    1  # 至少推进1个字符
+                )
+                new_start = start + min_advance
+                logger.warning(f"⚠️  检测到位置未推进（块长度={chunk_length}），强制推进到 {new_start}（推进{min_advance}个字符）")
+            
+            # 确保不会超过文本长度
+            if new_start >= text_length:
+                # 如果还有剩余文本，创建一个最后的块
+                remaining = text[start:].strip()
+                if remaining and len(remaining) >= min_chunk_size:
+                    chunks.append(remaining)
+                break
             
             start = new_start
         
