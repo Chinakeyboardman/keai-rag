@@ -615,7 +615,7 @@
             }
         });
 
-        // 提问
+        // 提问（流式输出）
         queryBtn.addEventListener('click', async () => {
             const question = queryInput.value.trim();
             if (!question) {
@@ -627,7 +627,7 @@
             resultArea.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在思考...</p></div>';
 
             try {
-                const response = await fetch('/api/v1/query', {
+                const response = await fetch('/api/v1/query/stream', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -635,45 +635,108 @@
                     body: JSON.stringify({
                         question: question,
                         top_k: 3,
-                        include_suggestions: true
+                        include_suggestions: true,
+                        num_suggestions: 3
                     })
                 });
 
-                const result = await response.json();
-
-                if (response.ok) {
-                    const answer = result.answer || '暂无答案';
-                    // 使用 marked 渲染 markdown
-                    const markdownHtml = marked.parse(answer);
-                    
-                    // 存储答案到全局变量，用于全屏显示
-                    window.currentAnswer = answer;
-                    
-                    let html = `
-                        <button class="btn-expand" onclick="showFullAnswer()">🔍 全屏查看</button>
-                        <div class="result-item">
-                            <h3>💡 回答</h3>
-                            <div class="markdown-content">${markdownHtml}</div>
-                        </div>
-                    `;
-
-                    if (result.suggested_questions && result.suggested_questions.length > 0) {
-                        html += `
-                            <div class="suggestions">
-                                <h3 style="color: #667eea; margin-bottom: 10px;">🤔 您可能还想问：</h3>
-                                ${result.suggested_questions.map(q => `
-                                    <div class="suggestion-item" onclick="askQuestion('${q.replace(/'/g, "\\'")}')">${q}</div>
-                                `).join('')}
-                            </div>
-                        `;
-                    }
-
-                    resultArea.innerHTML = html;
-                } else {
-                    resultArea.innerHTML = `<div class="status error">❌ ${result.error || '查询失败'}</div>`;
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let fullAnswer = '';
+                let sources = null;
+                let answerStarted = false;
+
+                // 初始化答案显示区域
+                resultArea.innerHTML = `
+                    <div class="result-item">
+                        <h3>💡 回答</h3>
+                        <div class="markdown-content" id="answerContent" style="min-height: 50px;">
+                            <div class="loading"><div class="spinner"></div><p>正在生成答案...</p></div>
+                        </div>
+                    </div>
+                    <div id="suggestionsContainer" style="display: none;"></div>
+                `;
+                const answerContent = document.getElementById('answerContent');
+                const suggestionsContainer = document.getElementById('suggestionsContainer');
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || ''; // 保留最后一个不完整的行
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+
+                                if (data.type === 'sources') {
+                                    sources = data.sources;
+                                    // 来源信息可以在这里显示，但通常不需要立即显示
+                                } else if (data.type === 'chunk') {
+                                    if (!answerStarted) {
+                                        answerContent.innerHTML = '';
+                                        answerStarted = true;
+                                    }
+                                    fullAnswer += data.content;
+                                    // 实时更新显示（使用 marked 渲染 markdown）
+                                    // 使用 requestAnimationFrame 优化渲染性能
+                                    requestAnimationFrame(() => {
+                                        answerContent.innerHTML = marked.parse(fullAnswer);
+                                        // 自动滚动到底部
+                                        resultArea.scrollTop = resultArea.scrollHeight;
+                                    });
+                                } else if (data.type === 'done') {
+                                    fullAnswer = data.answer || fullAnswer;
+                                    // 最终渲染
+                                    answerContent.innerHTML = marked.parse(fullAnswer);
+                                    // 存储答案到全局变量，用于全屏显示
+                                    window.currentAnswer = fullAnswer;
+                                    
+                                    // 添加全屏查看按钮
+                                    if (!document.querySelector('.btn-expand')) {
+                                        const expandBtn = document.createElement('button');
+                                        expandBtn.className = 'btn-expand';
+                                        expandBtn.textContent = '🔍 全屏查看';
+                                        expandBtn.onclick = showFullAnswer;
+                                        resultArea.insertBefore(expandBtn, resultArea.firstChild);
+                                    }
+                                } else if (data.type === 'suggestions') {
+                                    // 显示推荐问题
+                                    if (data.suggested_questions && data.suggested_questions.length > 0) {
+                                        let suggestionsHtml = `
+                                            <div class="suggestions">
+                                                <h3 style="color: #667eea; margin-bottom: 10px;">🤔 您可能还想问：</h3>
+                                                ${data.suggested_questions.map(q => `
+                                                    <div class="suggestion-item" onclick="askQuestion('${q.replace(/'/g, "\\'")}')">${q}</div>
+                                                `).join('')}
+                                            </div>
+                                        `;
+                                        suggestionsContainer.innerHTML = suggestionsHtml;
+                                        suggestionsContainer.style.display = 'block';
+                                    }
+                                } else if (data.type === 'error') {
+                                    throw new Error(data.message);
+                                }
+                            } catch (e) {
+                                console.error('解析SSE数据失败:', e, line);
+                            }
+                        }
+                    }
+                }
+
+                // 流式输出完成后，可以在这里添加推荐问题等功能
+                // 注意：流式接口目前不支持推荐问题，如果需要可以调用普通接口获取
+
             } catch (error) {
-                resultArea.innerHTML = `<div class="status error">❌ 网络错误: ${error.message}</div>`;
+                resultArea.innerHTML = `<div class="status error">❌ ${error.message || '查询失败'}</div>`;
             } finally {
                 queryBtn.disabled = false;
             }

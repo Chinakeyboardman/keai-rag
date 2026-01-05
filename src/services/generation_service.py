@@ -5,7 +5,7 @@
 实现 RAG 生成和问题推荐
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterator, Tuple
 
 from src.services.llm_service import get_llm_service
 from src.services.retrieval_service import RetrievalService
@@ -185,6 +185,74 @@ class GenerationService:
         result["suggested_questions"] = suggestions
         
         return result
+    
+    def generate_answer_stream(
+        self,
+        question: str,
+        top_k: Optional[int] = None
+    ) -> Tuple[Iterator[str], List[Dict[str, Any]]]:
+        """
+        基于 RAG 流式生成答案
+        
+        Args:
+            question: 用户问题
+            top_k: 检索文档数量
+            
+        Returns:
+            (答案生成器, 来源信息列表)
+        """
+        # 检索相关文档
+        logger.info(f"🔍 开始检索相关文档...")
+        effective_top_k = top_k if top_k is not None else max(10, self.retrieval_service.top_k)
+        results = self.retrieval_service.retrieve(question, effective_top_k)
+        logger.info(f"✅ 检索完成，找到 {len(results)} 个相关文档块")
+        
+        # 记录检索结果的相似度分数
+        if results:
+            scores = [r.score for r in results]
+            logger.info(f"📊 相似度分数范围: {min(scores):.4f} - {max(scores):.4f}, 平均: {sum(scores)/len(scores):.4f}")
+        
+        # 构建来源信息（在流式生成前准备好）
+        sources = [
+            {
+                "id": result.id,
+                "text": result.text[:200] + "..." if len(result.text) > 200 else result.text,
+                "score": result.score,
+                "metadata": result.metadata
+            }
+            for result in results
+        ]
+        
+        if not results:
+            logger.warning(f"⚠️  未找到相关文档")
+            # 返回一个只包含错误消息的生成器
+            def error_generator():
+                yield "抱歉，我没有找到相关的文档来回答这个问题。"
+            return error_generator(), []
+        
+        # 构建上下文
+        logger.info(f"📝 构建上下文...")
+        context = self._build_context(results)
+        logger.info(f"✅ 上下文构建完成，长度: {len(context)} 字符")
+        
+        # 构建提示词
+        logger.info(f"📝 构建提示词...")
+        prompt = self._build_prompt(question, context)
+        logger.info(f"✅ 提示词构建完成，长度: {len(prompt)} 字符")
+        
+        # 流式生成答案
+        logger.info(f"🤖 开始流式调用 LLM 生成答案...")
+        
+        def answer_generator():
+            try:
+                for chunk in self.llm_service.generate_stream(prompt):
+                    yield chunk
+                logger.info(f"✅ LLM 流式生成完成")
+            except Exception as e:
+                logger.error(f"❌ LLM 流式生成失败: {e}", exc_info=True)
+                yield f"\n\n[错误：生成失败 - {str(e)}]"
+        
+        return answer_generator(), sources
     
     def _build_context(self, results: List[Any]) -> str:
         """

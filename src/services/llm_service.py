@@ -5,7 +5,7 @@ LLM 服务
 支持本地模型和 API 调用
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterator
 from pathlib import Path
 
 from config.settings import settings
@@ -241,6 +241,148 @@ class LLMService:
         except Exception as e:
             logger.error(f"❌ LLM API 调用失败: {type(e).__name__}: {e}", exc_info=True)
             raise RuntimeError(f"API 生成失败: {e}")
+    
+    def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None
+    ) -> Iterator[str]:
+        """
+        流式生成文本（逐token返回）
+        
+        Args:
+            prompt: 用户提示词
+            system_prompt: 系统提示词
+            temperature: 温度参数
+            max_tokens: 最大 token 数
+            
+        Yields:
+            生成的文本片段
+        """
+        if not prompt or not prompt.strip():
+            raise ValueError("提示词不能为空")
+        
+        temp = temperature if temperature is not None else self.temperature
+        max_tok = max_tokens if max_tokens is not None else self.max_tokens
+        
+        if self.model_type == "local":
+            yield from self._generate_stream_with_local_model(prompt, system_prompt, temp, max_tok)
+        else:
+            yield from self._generate_stream_with_api(prompt, system_prompt, temp, max_tok)
+    
+    def _generate_stream_with_local_model(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        temperature: float,
+        max_tokens: int
+    ) -> Iterator[str]:
+        """使用本地模型流式生成"""
+        try:
+            import torch
+            from transformers import TextIteratorStreamer
+            from threading import Thread
+            
+            # 构建消息
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            # 应用聊天模板
+            text = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+            
+            # Tokenize
+            inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
+            
+            # 创建流式生成器
+            streamer = TextIteratorStreamer(
+                self.tokenizer,
+                skip_prompt=True,
+                skip_special_tokens=True
+            )
+            
+            # 在单独线程中生成
+            generation_kwargs = {
+                **inputs,
+                "max_new_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": self.top_p,
+                "do_sample": temperature > 0,
+                "streamer": streamer
+            }
+            
+            thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+            thread.start()
+            
+            # 流式返回生成的文本
+            for text in streamer:
+                if text:
+                    yield text
+                    
+        except Exception as e:
+            raise RuntimeError(f"本地模型流式生成失败: {e}")
+    
+    def _generate_stream_with_api(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        temperature: float,
+        max_tokens: int
+    ) -> Iterator[str]:
+        """使用 API 流式生成"""
+        from src.utils.logger import logger
+        import time
+        
+        try:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            logger.info(f"📞 流式调用 LLM API: {self.model_name}")
+            logger.info(f"📝 提示词长度: {len(prompt)} 字符")
+            
+            start_time = time.time()
+            
+            try:
+                # 使用流式API
+                stream = self.model.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    top_p=self.top_p,
+                    stream=True,  # 启用流式输出
+                    timeout=120.0
+                )
+                
+                # 逐块返回生成的文本
+                for chunk in stream:
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta
+                        if delta and delta.content:
+                            yield delta.content
+                
+                elapsed_time = time.time() - start_time
+                logger.info(f"✅ LLM API 流式调用成功，耗时 {elapsed_time:.2f} 秒")
+                
+            except Exception as api_error:
+                elapsed_time = time.time() - start_time
+                logger.error(f"❌ LLM API 流式调用异常（耗时 {elapsed_time:.2f} 秒）: {type(api_error).__name__}: {api_error}")
+                raise
+                
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"❌ LLM API 流式调用失败: {type(e).__name__}: {e}", exc_info=True)
+            raise RuntimeError(f"API 流式生成失败: {e}")
     
     def get_model_info(self) -> dict:
         """获取模型信息"""
